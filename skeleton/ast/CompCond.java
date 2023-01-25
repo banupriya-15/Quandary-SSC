@@ -1,16 +1,19 @@
 package ast;
 
-public class BinaryExpr extends Expr {
+public class CompCond extends Cond {
 
-    public static final int PLUS = 1;
-    public static final int MINUS = 2;
-    public static final int TIMES = 3;
+    public static final int GE = 1;
+    public static final int GT = 2;
+    public static final int LE = 3;
+    public static final int LT = 4;
+    public static final int NE = 5;
+    public static final int EQ = 6;
 
     final Expr expr1;
     final int operator;
     final Expr expr2;
 
-    public BinaryExpr(Expr expr1, int operator, Expr expr2, Location loc) {
+    public CompCond(Expr expr1, int operator, Expr expr2, Location loc) {
         super(loc);
         this.expr1 = expr1;
         this.operator = operator;
@@ -31,11 +34,6 @@ public class BinaryExpr extends Expr {
 
     @Override
     public String toString() {
-        String s = null;
-        switch (operator) {
-            case PLUS:  s = "+"; break;
-            case MINUS: s = "-"; break;
-        }
-        return "(" + expr1 + " " + s + " " + expr2 + ")";
-    }
+        return null;
+       }
 }
