@@ -84,12 +84,10 @@ public class Interpreter {
 
     final Program astRoot;
     final Random random;
-    final HashMap<String,Object> env;
 
     private Interpreter(Program astRoot) {
         this.astRoot = astRoot;
         this.random = new Random();
-        this.env = new HashMap<String,Object>();
     }
 
     void initMemoryManager(String gcType, long heapBytes) {
@@ -104,49 +102,70 @@ public class Interpreter {
         }
     }
 
-    Object executeRoot(Program astRoot, long arg) {
-        env.put(astRoot.getArgName(), arg);
-        return execute(astRoot.getStmtList());
+    QVal executeRoot(Program astRoot, long arg) {
+        FuncDef mainFuncDef = astRoot.getFuncs().lookupFuncDef("main");
+        HashMap<String,QVal> mainEnv= new HashMap<String,QVal>();
+        mainEnv.put(mainFuncDef.getParams().getFirst(), new QInt(arg));
+        return execute(mainFuncDef.getBody(),mainEnv);
     }
 
-    Object execute(Stmt stmt) {
+    QVal execute(Stmt stmt, HashMap<String,QVal> env) {
         if( stmt instanceof StmtList)
         {
             StmtList sl =(StmtList)stmt;
-            Object retVal = execute(sl.getFirst());
+            QVal retVal = execute(sl.getFirst(), env);
             if(retVal != null)
                return retVal;
             if(sl.getRest() != null)
             {
-                return execute(sl.getRest());
+                return execute(sl.getRest(), env);
             }
             return null;
         }
         else if ( stmt instanceof DeclStmt)
         {
             DeclStmt declStmt = (DeclStmt)stmt;
-            env.put(declStmt.getVarName(), evaluate(declStmt.getExpr()));
+            env.put(declStmt.getVarName(), evaluate(declStmt.getExpr(),env));
             return null;
         }
         else if ( stmt instanceof IfStmt)
         {
             IfStmt ifStmt= (IfStmt)stmt;
-            if(evaluate(ifStmt.getCond()))
+            if(evaluate(ifStmt.getCond(),env))
             {
-                return execute(ifStmt.getThenStmt());
+                return execute(ifStmt.getThenStmt(), env);
             }
             else if(ifStmt.getElseStmt() != null)
             {
-                return execute(ifStmt.getElseStmt());
+                return execute(ifStmt.getElseStmt(), env);
             }
             return null;
         }
+        else if (stmt instanceof WhileStmt){
+            WhileStmt whileStmt = (WhileStmt)stmt;
+            while(evaluate(whileStmt.getCond(),env))
+            {
+                QVal retVal= execute(whileStmt.getBody(),env);
+                if( retVal != null)
+                {
+                    return retVal;
+                }
+            }
+            return null;
+        }
+        else if (stmt instanceof CallStmt)
+        {
+          CallStmt callStmt= (CallStmt)stmt;
+          evaluate(callStmt.getcallExpr(), env);
+          return null;
+        }
+
         else if(stmt instanceof PrintStmt){
-            System.out.println(evaluate(((PrintStmt)stmt).getExpr()));
+            System.out.println(evaluate(((PrintStmt)stmt).getExpr(), env));
             return null;
         }
         else if(stmt instanceof ReturnStmt){
-            return evaluate(((ReturnStmt)stmt).getExpr());
+            return evaluate(((ReturnStmt)stmt).getExpr(), env);
         }
         else
         {
@@ -154,23 +173,92 @@ public class Interpreter {
         }
     }
 
-    Object evaluate(Expr expr) {
-        if (expr instanceof ConstExpr) {
-            return ((ConstExpr)expr).getValue();
+    QVal evaluate(Expr expr,HashMap<String,QVal> env) {
+        if(expr instanceof NilExpr)
+        {
+            return new QRef(null);
+        }
+        else if (expr instanceof ConstExpr) {
+            return new QInt((long)((ConstExpr)expr).getValue());
         }
         else if (expr instanceof IdentExpr){
             return env.get(((IdentExpr)expr).getVarName());
         }
         else if (expr instanceof UnaryMinusExpr){
-            long value = (Long)evaluate(((UnaryMinusExpr)expr).getExpr());
-            return -value;
+            QInt v = (QInt)evaluate(((UnaryMinusExpr)expr).getExpr(),env);
+            return new QInt(-v.value);
+        }
+        else if( expr instanceof CallExpr){
+                CallExpr callExpr =(CallExpr)expr;
+                if(callExpr.getFuncName().equals("randomInt"))
+                {
+                    //System.out.println(callExpr.getArgs());
+                    long num =((QInt)evaluate(callExpr.getArgs().getFirst(),env)).value;
+                    long result = Math.abs(random.nextLong()) % num;
+                    //System.out.println(result);
+                    return new QInt(result);
+                }
+                else if(callExpr.getFuncName().equals("left"))
+                {
+                    QRef r =(QRef)evaluate(callExpr.getArgs().getFirst(),env);
+                    return r.referent.left;
+                }
+                else if(callExpr.getFuncName().equals("right"))
+                {
+                    QRef r =(QRef)evaluate(callExpr.getArgs().getFirst(),env);
+                    return r.referent.right;
+                }
+                else if(callExpr.getFuncName().equals("setLeft"))
+                {
+                    QRef r =(QRef)evaluate(callExpr.getArgs().getFirst(),env);
+                    QVal val =evaluate(callExpr.getArgs().getRest().getFirst(),env);
+                    r.referent.left=val;
+                    return new QInt(1); 
+                }
+                else if(callExpr.getFuncName().equals("setRight"))
+                {
+                    QRef r =(QRef)evaluate(callExpr.getArgs().getFirst(),env);
+                    QVal val =evaluate(callExpr.getArgs().getRest().getFirst(),env);
+                    r.referent.right=val;
+                    return new QInt(1); 
+                }
+                else if(callExpr.getFuncName().equals("isAtom"))
+                {
+                    QVal r =evaluate(callExpr.getArgs().getFirst(),env);
+                    if(r instanceof QInt || (r instanceof QRef && ((QRef)r).referent == null))
+                    {
+                        return new QInt(1);
+                    }
+                    return new QInt(0);
+                }
+                else if(callExpr.getFuncName().equals("isNil"))
+                {
+                    QVal r =evaluate(callExpr.getArgs().getFirst(),env);
+                    if(r instanceof QRef && ((QRef)r).referent == null)
+                    {
+                        return new QInt(1);
+                    }
+                    return new QInt(0);
+                }
+                FuncDef callee= astRoot.getFuncs().lookupFuncDef(callExpr.getFuncName());
+                HashMap<String,QVal> calleeEnv= new HashMap<String,QVal>();
+                FormalDeclList currFormalDeclList = callee.getParams();
+                ExprList currExprList = callExpr.getArgs();
+                while(currFormalDeclList != null)
+                {
+                    calleeEnv.put(currFormalDeclList.getFirst(), evaluate(currExprList.getFirst(),env));
+                    currFormalDeclList = currFormalDeclList.getRest();
+                    currExprList = currExprList.getRest();
+                } 
+                return execute(callee.getBody(), calleeEnv);
         }
         else if (expr instanceof BinaryExpr) {
             BinaryExpr binaryExpr = (BinaryExpr)expr;
             switch (binaryExpr.getOperator()) {
-                case BinaryExpr.PLUS: return (Long)evaluate(binaryExpr.getLeftExpr()) + (Long)evaluate(binaryExpr.getRightExpr());
-                case BinaryExpr.MINUS: return (Long)evaluate(binaryExpr.getLeftExpr()) - (Long)evaluate(binaryExpr.getRightExpr());
-                case BinaryExpr.TIMES: return (Long)evaluate(binaryExpr.getLeftExpr()) * (Long)evaluate(binaryExpr.getRightExpr());
+                case BinaryExpr.PLUS: return new QInt(((QInt)evaluate(binaryExpr.getLeftExpr(), env)).value + ((QInt)evaluate(binaryExpr.getRightExpr(), env)).value);
+                case BinaryExpr.MINUS: return new QInt(((QInt)evaluate(binaryExpr.getLeftExpr(), env)).value - ((QInt)evaluate(binaryExpr.getRightExpr(), env)).value);
+                case BinaryExpr.TIMES: return new QInt(((QInt)evaluate(binaryExpr.getLeftExpr(), env)).value * ((QInt)evaluate(binaryExpr.getRightExpr(), env)).value);
+                case BinaryExpr.DOT: return new QRef(new QObj(evaluate(binaryExpr.getLeftExpr(), env) , evaluate(binaryExpr.getRightExpr(), env)));
                 default: throw new RuntimeException("Unhandled operator");
             }
         } else {
@@ -178,18 +266,18 @@ public class Interpreter {
         }
     }
     
-    boolean evaluate(Cond cond)
+    boolean evaluate(Cond cond, HashMap<String,QVal> env)
     {
         if(cond instanceof CompCond)
         {
             CompCond compCond=(CompCond)cond;
             switch (compCond.getOperator()){
-                case CompCond.EQ: return (long)evaluate(compCond.getLeftExpr()) == (long)evaluate(compCond.getRightExpr());
-                case CompCond.NE: return (long)evaluate(compCond.getLeftExpr()) != (long)evaluate(compCond.getRightExpr());
-                case CompCond.LT: return (long)evaluate(compCond.getLeftExpr()) <  (long)evaluate(compCond.getRightExpr());
-                case CompCond.GT: return (long)evaluate(compCond.getLeftExpr()) >  (long)evaluate(compCond.getRightExpr());
-                case CompCond.LE: return (long)evaluate(compCond.getLeftExpr()) <= (long)evaluate(compCond.getRightExpr());
-                case CompCond.GE: return (long)evaluate(compCond.getLeftExpr()) >= (long)evaluate(compCond.getRightExpr());
+                case CompCond.EQ: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value == ((QInt)evaluate(compCond.getRightExpr(),env)).value;
+                case CompCond.NE: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value != ((QInt)evaluate(compCond.getRightExpr(),env)).value;
+                case CompCond.LT: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value <  ((QInt)evaluate(compCond.getRightExpr(),env)).value;
+                case CompCond.GT: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value >  ((QInt)evaluate(compCond.getRightExpr(),env)).value;
+                case CompCond.LE: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value <= ((QInt)evaluate(compCond.getRightExpr(),env)).value;
+                case CompCond.GE: return ((QInt)evaluate(compCond.getLeftExpr(),env)).value >= ((QInt)evaluate(compCond.getRightExpr(),env)).value;
             }
         }
         else if(cond instanceof LogicalCond)
@@ -197,9 +285,9 @@ public class Interpreter {
            LogicalCond logicalCond=(LogicalCond)cond;
            switch (logicalCond.getOperator())
            {
-                case LogicalCond.AND: return evaluate(logicalCond.getLeftCond()) && evaluate(logicalCond.getRightCond());
-                case LogicalCond.OR: return evaluate(logicalCond.getLeftCond()) || evaluate(logicalCond.getRightCond());
-                case LogicalCond.NOT: return !evaluate(logicalCond.getLeftCond());
+                case LogicalCond.AND: return evaluate(logicalCond.getLeftCond(),env) && evaluate(logicalCond.getRightCond(),env);
+                case LogicalCond.OR: return evaluate(logicalCond.getLeftCond(),env) || evaluate(logicalCond.getRightCond(),env);
+                case LogicalCond.NOT: return !evaluate(logicalCond.getLeftCond(),env);
            }
         }
         throw new RuntimeException();

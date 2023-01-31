@@ -64,15 +64,21 @@ white_space = {new_line} | [ \t\f]
 "+"               { return symbol("+",  PLUS); }
 "-"               { return symbol("-",  MINUS); }
 "*"               { return symbol("*",  TIMES); }
+"."               { return symbol(".",  DOT); }
 "("               { return symbol("(",  LPAREN); }
 ")"               { return symbol(")",  RPAREN); }
-"int"             { return symbol("int", INT); }
+"int"             { return symbol("int", INT) ;} 
 "{"               { return symbol("{",  LCURLY); }
 "}"               { return symbol("}",  RCURLY); }
 "="               { return symbol("=",  ASSIGN); }
 "if"              { return symbol("if", IF); }
 "else"            { return symbol("else", ELSE); }
 "print"           { return symbol("print",  PRINT); }
+"mutable"         { return symbol("mutable", MUTABLE); }
+"Ref"             { return symbol("Ref", REF); }
+"Q"               { return symbol("Q", Q); }
+"while"           { return symbol("while", WHILE); }
+"nil"             { return symbol("nil", NIL); }
 "<"               { return symbol("<",  LT); }
 ">"               { return symbol(">",  GT); }
 "<="               { return symbol("<=", LE); }
@@ -84,6 +90,7 @@ white_space = {new_line} | [ \t\f]
 "!"               { return symbol("!",  NOT); }
 "return"          { return symbol("return",  RETURN); }
 ";"               { return symbol(";",  SEMICOLON); }
+","               { return symbol(",",  COMMA); }
 
 [_a-zA-Z][_a-zA-Z0-9]* { return symbol("Ident", IDENT, yytext()); }
 

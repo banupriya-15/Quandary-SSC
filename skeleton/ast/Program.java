@@ -4,23 +4,17 @@ import java.io.PrintStream;
 
 public class Program extends ASTNode {
 
-    final StmtList stmtList;
-    final String argName;
+    final FuncDefList funcs;
 
 
-    public Program(String argName,StmtList stmtList, Location loc) {
+    public Program(FuncDefList funcs, Location loc) {
         super(loc);
-        this.argName = argName;
-        this.stmtList = stmtList;
+        this.funcs=funcs;
 
     }
 
-    public String getArgName()
-    {
-        return argName;
-    }
-    public StmtList getStmtList() {
-        return stmtList;
+    public FuncDefList getFuncs() {
+        return funcs;
     }
 
     public void println(PrintStream ps) {

@@ -28,12 +28,21 @@ parser code {:
 :};
 
 terminal PLUS, MINUS,TIMES, LPAREN, RPAREN, RETURN, SEMICOLON, UMINUS,
-         INT, LCURLY, RCURLY, ASSIGN, IF, ELSE, PRINT,
-         GE, GT, LE, LT, NE, EQ, AND, OR, NOT;
+         INT, LCURLY, RCURLY, ASSIGN, IF, ELSE, PRINT, COMMA,
+         GE, GT, LE, LT, NE, EQ, AND, OR, NOT,
+         MUTABLE, NIL,REF, Q, WHILE, DOT;
 terminal Long    INTCONST;
-terminal String IDENT;
+terminal String  IDENT;
 
 non terminal Program         program;
+non terminal String          varDecl;
+non terminal                 type;
+non terminal FuncDefList     funcDefList;
+non terminal FuncDef         funcDef;
+non terminal FormalDeclList  formalDeclList;
+non terminal FormalDeclList  neFormalDeclList;
+non terminal ExprList        exprList;
+non terminal ExprList        neExprList;
 non terminal Stmt            stmt;
 non terminal StmtList        stmtList;
 non terminal Expr            expr;
@@ -44,6 +53,7 @@ precedence left OR;
 precedence left AND;
 precedence left NOT;
 precedence left GE, LE, GT, LT, EQ, NE;
+precedence left DOT;
 precedence left PLUS, MINUS;
 precedence left TIMES;
 precedence left UMINUS;
@@ -51,22 +61,61 @@ precedence left ELSE;
 
 start with program;
 
-program ::= INT IDENT LPAREN INT IDENT:argName RPAREN LCURLY stmtList:sl RCURLY
-            {: RESULT = new Program(argName, sl , loc(argNameleft, argNameright)); :}
+program ::= funcDefList:fdl
+            {: RESULT = new Program(fdl , loc(fdlleft, fdlright)); :}
          ;
        
+funcDefList ::= funcDef:first funcDefList:rest
+               {: RESULT = new FuncDefList(first, rest, loc(firstleft, firstright)); :}
+             | /* empty string */
+               {: RESULT = null; :}
+              ;
+
+funcDef ::= varDecl: funcName LPAREN formalDeclList:params RPAREN LCURLY stmtList:body RCURLY
+         {: RESULT = new FuncDef(funcName, params, body, loc(funcNameleft, funcNameright)); :}      
+         ;
+      
+varDecl ::= type IDENT : varName
+         {: RESULT = varName; :}
+         | MUTABLE type IDENT : varName
+         {: RESULT = varName; :}
+         ;
+
+type ::= INT
+      |  REF
+      |  Q
+      ;
+
+formalDeclList ::= neFormalDeclList:list
+                {: RESULT = list; :}
+                | /*empty string */
+                {: RESULT = null; :}
+                ;
+
+neFormalDeclList ::= varDecl:first COMMA neFormalDeclList:rest
+                     {: RESULT = new FormalDeclList(first, rest, loc(firstleft,firstright)); :}
+                   | varDecl:first
+                     {: RESULT = new FormalDeclList(first, null, loc(firstleft,firstright));:}
+                   ;
+
 stmtList ::= stmt:s stmtList:sl
             {: RESULT = new StmtList(s, sl , loc(sleft, sright)); :}
             | /*empty string */
             {: RESULT = null; :}
             ;
       
-stmt ::= INT IDENT:varName ASSIGN expr:e SEMICOLON
+stmt ::= varDecl:varName ASSIGN expr:e SEMICOLON
+            {: RESULT = new DeclStmt(varName, e , loc(varNameleft, varNameright)); :}
+         |IDENT:varName ASSIGN expr:e SEMICOLON
             {: RESULT = new DeclStmt(varName, e , loc(varNameleft, varNameright)); :}
          | IF LPAREN cond:c RPAREN stmt:s
             {: RESULT = new IfStmt(c, s, null, loc(cleft,cright)); :}
          | IF LPAREN cond:c RPAREN stmt:s1 ELSE stmt:s2
             {: RESULT = new IfStmt(c, s1, s2, loc(cleft,cright)); :}
+         | WHILE LPAREN cond:c RPAREN stmt:s
+            {: RESULT = new WhileStmt(c, s, loc(cleft,cright)); :}
+         | IDENT:funcName LPAREN exprList:args RPAREN SEMICOLON
+            {: RESULT = new CallStmt(funcName, args, loc(funcNameleft, funcNameright)); :}
          | PRINT expr:e SEMICOLON
             {: RESULT = new PrintStmt(e, loc(eleft, eright)); :}
          |  RETURN expr:e SEMICOLON
@@ -75,13 +124,32 @@ stmt ::= INT IDENT:varName ASSIGN expr:e SEMICOLON
             {: RESULT = sl; :}
          ;
 
-expr ::= INTCONST:c
+exprList ::= neExprList:list
+          {: RESULT = list; :}
+          | /*empty string */
+          {: RESULT = null; :}
+         ;
+
+neExprList ::= expr:first COMMA neExprList:rest
+                     {: RESULT = new ExprList(first, rest, loc(firstleft,firstright)); :}
+                   | expr:first
+                     {: RESULT = new ExprList(first, null, loc(firstleft,firstright)); :}
+                   ;
+
+expr ::= NIL:n
+         {: RESULT = new NilExpr(loc(nleft, nright)); :}
+      | INTCONST:c
          {: RESULT = new ConstExpr(c, loc(cleft, cright)); :}
       | IDENT: varName
          {: RESULT = new IdentExpr(varName, loc(varNameleft,varNameright)); :}
       | MINUS expr:e
          {: RESULT = new UnaryMinusExpr(e, loc(eleft, eright)); :}
          %prec UMINUS
+      | LPAREN type RPAREN expr:e
+         {: RESULT = e; :}
+         %prec UMINUS
+      |  IDENT:funcName LPAREN exprList:args RPAREN
+         {: RESULT = new CallExpr(funcName, args, loc(funcNameleft, funcNameright)) ;:}
       |  binaryExpr:e
          {: RESULT = e; :}
       |  LPAREN expr:e RPAREN
@@ -94,6 +162,8 @@ binaryExpr ::= expr:e1 PLUS expr:e2
                {: RESULT = new BinaryExpr(e1, BinaryExpr.MINUS, e2, loc(e1left, e1right)); :}
             |  expr:e1 TIMES expr:e2
                {: RESULT = new BinaryExpr(e1, BinaryExpr.TIMES, e2, loc(e1left, e1right)); :}
+            |  expr:e1 DOT expr:e2
+               {: RESULT = new BinaryExpr(e1, BinaryExpr.DOT, e2, loc(e1left, e1right)); :}
             ;
 
 cond ::= expr:e1 LE expr:e2
