@@ -1,18 +1,18 @@
 package ast;
 
-public class DeclStmt extends Stmt {
+public class AssignStmt extends Stmt {
 
-    final VarDecl varDecl;
+    final String varName;
     final Expr expr;
 
-    public DeclStmt(VarDecl varDecl,Expr expr, Location loc) {
+    public AssignStmt(String varName,Expr expr, Location loc) {
         super(loc);
-        this.varDecl= varDecl;
+        this.varName= varName;
         this.expr = expr;
     }
 
-    public VarDecl getVarDecl() {
-        return varDecl;
+    public String getVarName() {
+        return varName;
     }
 
     public Expr getExpr() {

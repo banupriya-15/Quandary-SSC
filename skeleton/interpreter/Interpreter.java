@@ -105,15 +105,12 @@ public class Interpreter {
     QVal executeRoot(Program astRoot, long arg) {
         FuncDef mainFuncDef = astRoot.getFuncs().lookupFuncDef("main");
         HashMap<String,QVal> mainEnv= new HashMap<String,QVal>();
-        mainEnv.put(mainFuncDef.getParams().getFirst(), new QInt(arg));
+        mainEnv.put(mainFuncDef.getParams().getFirst().getName(), new QInt(arg));
         return execute(mainFuncDef.getBody(),mainEnv);
     }
 
-    QVal execute(Stmt stmt, HashMap<String,QVal> env) {
-        if( stmt instanceof StmtList)
-        {
-            StmtList sl =(StmtList)stmt;
-            QVal retVal = execute(sl.getFirst(), env);
+    QVal execute(StmtList sl, HashMap<String,QVal> env) {
+        QVal retVal = execute(sl.getFirst(), env);
             if(retVal != null)
                return retVal;
             if(sl.getRest() != null)
@@ -121,11 +118,18 @@ public class Interpreter {
                 return execute(sl.getRest(), env);
             }
             return null;
-        }
-        else if ( stmt instanceof DeclStmt)
+    }
+    QVal execute(Stmt stmt, HashMap<String,QVal> env) {
+        if ( stmt instanceof DeclStmt)
         {
             DeclStmt declStmt = (DeclStmt)stmt;
-            env.put(declStmt.getVarName(), evaluate(declStmt.getExpr(),env));
+            env.put(declStmt.getVarDecl().getName(), evaluate(declStmt.getExpr(),env));
+            return null;
+        }
+        else if ( stmt instanceof AssignStmt)
+        {
+            AssignStmt assignStmt = (AssignStmt)stmt;
+            env.put(assignStmt.getVarName(), evaluate(assignStmt.getExpr(),env));
             return null;
         }
         else if ( stmt instanceof IfStmt)
@@ -167,6 +171,10 @@ public class Interpreter {
         else if(stmt instanceof ReturnStmt){
             return evaluate(((ReturnStmt)stmt).getExpr(), env);
         }
+        
+        else if(stmt instanceof CompoundStmt){
+            return execute(((CompoundStmt)stmt).getBody(), env);
+        }
         else
         {
             throw new RuntimeException();
@@ -187,6 +195,9 @@ public class Interpreter {
         else if (expr instanceof UnaryMinusExpr){
             QInt v = (QInt)evaluate(((UnaryMinusExpr)expr).getExpr(),env);
             return new QInt(-v.value);
+        }
+        else if (expr instanceof CastExpr){
+            return evaluate (((CastExpr)expr).getExpr(), env);
         }
         else if( expr instanceof CallExpr){
                 CallExpr callExpr =(CallExpr)expr;
@@ -246,7 +257,7 @@ public class Interpreter {
                 ExprList currExprList = callExpr.getArgs();
                 while(currFormalDeclList != null)
                 {
-                    calleeEnv.put(currFormalDeclList.getFirst(), evaluate(currExprList.getFirst(),env));
+                    calleeEnv.put(currFormalDeclList.getFirst().getName(), evaluate(currExprList.getFirst(),env));
                     currFormalDeclList = currFormalDeclList.getRest();
                     currExprList = currExprList.getRest();
                 } 

@@ -22,7 +22,7 @@ public class FuncDefList extends ASTNode {
 
     public FuncDef lookupFuncDef(String name)
     {
-        if(first.funcName.equals(name))
+        if(first.getVarDecl().getName().equals(name))
         { 
             return first;
         }
